@@ -1,0 +1,278 @@
+---
+title: "Milestone2"
+author: "SFC"
+date: "3/26/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Milestone 2
+The goals of my project have remained mostly the same sine Milestone 1. In addition to participating in the DataCamp "A Text Analysis of Trump's Tweets" by David Robinson, Chief data scientist, DataCamp https://projects.datacamp.com/projects/511. I have also decided to pull current Trump tweets for text and sentiment analysis. The DataCamp project provided many resources as I wrote the code to aanalyze Trump Tweets from Donald Trump’s timeline. The dataset is from The Trump Twitter Archive by Brendan Brown, which contains all 35,000+ tweets from the @realDonaldTrump Twitter account from 2009 (the year Trump sent his first tweet) through 2018. Filtered for the election period only, June 1st, 2015 through November 8th, 2016.
+
+### libraries
+So many libraries, I am a little confused here, everytime in the Datacamp code when a library was introduced I added it to the beginning of the document as I wished to have a list of all of the libraries at the end of my project. Additionally links were often provided for increased opportunity to learn why each library was used which I only at the end realized I should have saved every link. I am now going back to record each link as I will need them to write Milestone 3. Here you can see I added the link provided for dplyr. These are the kinds of details I will hopefully learn now so I don't make more work for myself in the future. The other way in which my project has evolved is now I plan on making the learning of advanced statistical methods in a PhD program the focus of my manuscript. I could really care less about Dnoald Trumps Tweets. The methods I am learning are far more valuable then knowing which phone Trump tweeted from or what sentiment is present in his Tweets. However, I am finding the skills I am learning to be incredibly valuable and have many ideas of how I could use them in the future already.
+
+```{r}
+library(dplyr)
+#https://dplyr.tidyverse.org/reference/tally.html
+library(purrr)
+library(twitteR)
+library(readr)
+library(tidytext)
+library(RCurl); packageVersion("RCurl")
+library(tidyverse); packageVersion("tidyverse")
+#https://www.datacamp.com/courses/introduction-to-the-tidyverse
+#https://s3.amazonaws.com/assets.datacamp.com/blog_assets/Tidyverse+Cheat+Sheet.pdf
+library(stringr); packageVersion("stringr")
+#https://www.rstudio.com/resources/cheatsheets/  #working with strings
+library(rvest); packageVersion("rvest")
+library(methods); packageVersion("methods")
+library(tm); packageVersion("tm")
+library(wordcloud); packageVersion("wordcloud")
+library(RColorBrewer); packageVersion("RColorBrewer")
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.```{r eval = FALSE}
+###set global options with an authenticated app
+setup_twitter_oauth(getOption("twitter_consumer_key"),
+                    getOption("twitter_consumer_secret"),
+                    getOption("twitter_access_token"),
+                    getOption("twitter_access_token_secret"))
+### 3200 tweets at a time; it will return fewer depending on the API
+trump_tweets <- userTimeline("realDonaldTrump", n = 3200)
+trump_tweets_df <- tbl_df(map_df(trump_tweets, as.data.frame))
+
+This chunck was impossible to run, so I used the provided dataset. I have been able to pull Tweets using a similar code, however, in this instance the code would not work. 
+
+### Later I will show where I pull Trump tweets from his current iPhone.
+For the purpose of this exercise I used provided dataset
+```{r trump_tweets_df}
+# follow along without setting up Twitter authentication,
+# use dataset:
+load(url("http://varianceexplained.org/files/trump_tweets_df.rda"))
+```
+Clean data, source application (exclude web, iPad)
+```{r tweets, dependson = "trump_tweets_df"}
+library(tidyr)
+tweets <- trump_tweets_df %>%
+  select(id, statusSource, text, created) %>%
+  #https://dplyr.tidyverse.org/reference/tally.html extracting one column into multiple columns
+  extract(statusSource, "source", "Twitter for (.*?)<") %>%
+  filter(source %in% c("iPhone", "Android"))
+```
+## Time difference in Tweets
+Load lubridate and scales packages.
+* https://cran.r-project.org/web/packages/lubridate/index.html
+* https://cran.r-project.org/web/packages/scales/index.html
+```{r dependson = "tweets"}
+library(lubridate)
+library(scales)
+tweets %>%
+  count(source, hour = hour(with_tz(created, "EST"))) %>%
+  mutate(percent = n / sum(n)) %>%
+  ggplot(aes(hour, percent, color = source)) +
+  geom_line() +
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Hour of day (EST)",
+       y = "% of tweets",
+       color = "")
+```
+
+### You can see a difference in times of tweets from each phone.
+Here we run code to see which tweets start with "" marks. Introduction to stringr https://cran.r-project.org/web/packages/stringr/vignettes/stringr.html
+```{r dependson = "tweets", echo = FALSE}
+library(stringr)
+#https://dplyr.tidyverse.org/reference/tally.html coun/tally observations by group
+tweets %>%
+  count(source,
+        quoted = ifelse(str_detect(text, '^"'), "Quoted", "Not quoted")) %>%
+#geom_bar info https://www.rdocumentation.org/packages/ggplot2/versions/1.0.1/topics/geom_bar
+  ggplot(aes(source, n, fill = quoted)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "", y = "Number of tweets", fill = "") +
+  ggtitle('Whether tweets start with a quotation mark (")')
+```
+
+##Tweets with pictures/links
+Here we are just gathering as much info as possible to see if we continue to see differences in the phones. DataCamp links:
+* logical operators https://www.rdocumentation.org/packages/base/versions/3.5.1/topics/Logic
+* geom_bar() https://www.rdocumentation.org/packages/ggplot2/versions/1.0.1/topics/geom_bar
+* count () documentaion https://dplyr.tidyverse.org/reference/tally.html
+* introduction to stringr https://cran.r-project.org/web/packages/stringr/vignettes/stringr.html
+```{r, dependson = "tweets"}
+tweet_picture_counts <- tweets %>%
+  filter(!str_detect(text, '^"')) %>%
+  count(source,
+        picture = ifelse(str_detect(text, "t.co"),
+                         "Picture/link", "No picture/link"))
+ggplot(tweet_picture_counts, aes(source, n, fill = picture)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "", y = "Number of tweets", fill = "")
+spr <- tweet_picture_counts %>%
+  spread(source, n) %>%
+  mutate_each(funs(. / sum(.)), Android, iPhone)
+rr <- spr$iPhone[2] / spr$Android[2]
+```
+
+## Comparison of words
+Earlier we see a difference in the use of the two phones, now for word analysis using tidytext and introductory info at https://cran.r-project.org/web/packages/tidytext/vignettes/tidytext.html and https://cran.r-project.org/web/packages/tidytext
+regular expression https://en.wikipedia.org/wiki/Regular_expression
+```{r tweet_words, dependson = "tweets"}
+library(tidytext)
+reg <- "([^A-Za-z\\d#@']|'(?![A-Za-z\\d#@]))"
+tweet_words <- tweets %>%
+  filter(!str_detect(text, '^"')) %>%
+  mutate(text = str_replace_all(text, "https://t.co/[A-Za-z\\d]+|&amp;", "")) %>%
+  unnest_tokens(word, text, token = "regex", pattern = reg) %>%
+  filter(!word %in% stop_words$word,
+         str_detect(word, "[a-z]"))
+tweet_words
+```
+
+### Most Common Words
+Create plots using Laplace smoothing https://en.wikipedia.org/wiki/Additive_smoothing, additionally this article was provided on DataCamp to further understand how we can put more trust in common words http://varianceexplained.org/r/empirical_bayes_baseball/
+
+```{r tweet_words_plot, dependson = "tweet_words", fig.height = 6, fig.width = 8, echo = FALSE}
+tweet_words %>%
+  count(word, sort = TRUE) %>%
+  head(20) %>%
+  mutate(word = reorder(word, n)) %>%
+#https://www.datacamp.com/courses/data-visualization-with-ggplot2-1
+  ggplot(aes(word, n)) +
+  geom_bar(stat = "identity") +
+  ylab("Occurrences") +
+  coord_flip()
+```
+
+### Android vs iPhone
+```{r android_iphone_ratios, dependson = "tweet_words"}
+android_iphone_ratios <- tweet_words %>%
+  count(word, source) %>%
+  filter(sum(n) >= 5) %>%
+  spread(source, n, fill = 0) %>%
+  ungroup() %>%
+  mutate_each(funs((. + 1) / sum(. + 1)), -word) %>%
+  mutate(logratio = log2(Android / iPhone)) %>%
+  arrange(desc(logratio))
+```
+
+### Plot
+Resources:
+* Coordinate systems https://ggplot2.tidyverse.org/reference/#section-coordinate-systems
+* The coordinate system determines how the x and y aesthetics combine to position elements in the plot. The default coordinate system is Cartesian (coord_cartesian()), which can be tweaked with coord_map(), coord_fixed(), coord_flip(), and coord_trans(), or completely replaced with coord_polar().
+
+```{r android_iphone_ratios_plot, dependson = "android_iphone_ratios", fig.height = 6, fig.width = 8, echo = FALSE}
+android_iphone_ratios %>%
+  group_by(logratio > 0) %>%
+  top_n(15, abs(logratio)) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, logratio)) %>%
+  ggplot(aes(word, logratio, fill = logratio < 0)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  ylab("Android / iPhone log ratio") +
+  scale_fill_manual(name = "", labels = c("Android", "iPhone"),
+                    values = c("red", "lightblue"))
+```
+
+## Adding Sentiments
+Is there a difference in sentiments between the phones?
+```{r nrc}
+nrc <- sentiments %>%
+  filter(lexicon == "nrc") %>%
+  dplyr::select(word, sentiment)
+nrc
+```
+
+## Sentiment Analysis
+https://www.datacamp.com/courses/sentiment-analysis-in-r-the-tidy-way
+```{r by_source_sentiment, dependson = c("nrc", "tweet_words")}
+sources <- tweet_words %>%
+  group_by(source) %>%
+  mutate(total_words = n()) %>%
+  ungroup() %>%
+  distinct(id, source, total_words)
+by_source_sentiment <- tweet_words %>%
+  inner_join(nrc, by = "word") %>%
+  count(sentiment, id) %>%
+  ungroup() %>%
+  complete(sentiment, id, fill = list(n = 0)) %>%
+  inner_join(sources) %>%
+  group_by(source, sentiment, total_words) %>%
+  summarize(words = sum(n)) %>%
+  ungroup()
+head(by_source_sentiment)
+```
+
+### Introduction to broom
+https://cran.r-project.org/web/packages/broom/vignettes/broom.html
+```{r}
+library(broom)
+sentiment_differences <- by_source_sentiment %>%
+  group_by(sentiment) %>%
+  do(tidy(poisson.test(.$words, .$total_words)))
+sentiment_differences
+
+```
+
+### Librqary scales
+* https://scales.r-lib.org/
+* https://www.rdocumentation.org/packages/base/versions/3.5.3/topics/scale
+```{r dependson = "sentiment_differences", echo = FALSE, fig.height = 8, fig.width = 8}
+library(scales)
+sentiment_differences %>%
+  ungroup() %>%
+  mutate(sentiment = reorder(sentiment, estimate)) %>%
+  mutate_each(funs(. - 1), estimate, conf.low, conf.high) %>%
+  ggplot(aes(estimate, sentiment)) +
+  geom_point() +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high)) +
+  scale_x_continuous(labels = percent_format()) +
+  labs(x = "% increase in Android relative to iPhone",
+       y = "Sentiment")
+```
+
+### Plots are of log odds ratios by device. 
+* https://www.rdocumentation.org/packages/base/versions/3.5.1/topics/MathFun
+```{r dependson = "android_iphone_ratios", echo = FALSE, fig.height = 6, fig.width = 8}
+android_iphone_ratios %>%
+  inner_join(nrc, by = "word") %>%
+  filter(!sentiment %in% c("positive", "negative")) %>%
+  mutate(sentiment = reorder(sentiment, -logratio),
+         word = reorder(word, -logratio)) %>%
+  group_by(sentiment) %>%
+  top_n(10, abs(logratio)) %>%
+  ungroup() %>%
+  ggplot(aes(word, logratio, fill = logratio < 0)) +
+  facet_wrap(~ sentiment, scales = "free", nrow = 2) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x = "", y = "Android / iPhone log ratio") +
+  scale_fill_manual(name = "", labels = c("Android", "iPhone"),
+                    values = c("red", "lightblue"))
+```
+
+## Now for word clouds
+For this code I used past assignments in 701, this exercise is not part of the Data Camp lesson, I wanted to see if I could create word clouds on my own.
+```{r}
+tweet_words %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+
+### Reshape
+* https://cran.r-project.org/web/packages/reshape/reshape.pdf
+```{r}
+library(reshape2)
+
+tweet_words %>%
+  inner_join(nrc, by = "word") %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("#F8766D", "#00BFC4"),
+                   max.words = 100)
+```
+
